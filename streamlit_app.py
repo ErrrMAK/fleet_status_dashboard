@@ -137,6 +137,6 @@ if update_button:
             st.plotly_chart(fig2)
 
         # Final table
-        display_df = df[['object_label', 'latitude', 'longitude', 'speed', 'connection_status', 'moving_status']]
+        display_df = df[['object_label', 'latitude', 'longitude', 'speed_n', 'connection_status', 'moving_status']]
         display_df.columns = ['Object Label', 'Last Latitude', 'Last Longitude', 'Last Speed', 'Connection Status', 'Moving Status']
         st.dataframe(display_df, use_container_width=True)
