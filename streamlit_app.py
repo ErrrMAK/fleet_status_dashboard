@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from sqlalchemy import create_engine
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 import plotly.express as px
 
 st.set_page_config(layout="wide")
@@ -28,7 +28,7 @@ with col3:
 with col4:
     gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 10, 5)
 
-# Data processing
+# Data fetching function
 @st.cache_data(ttl=300)
 def fetch_data():
     try:
@@ -70,15 +70,15 @@ def fetch_data():
         st.error(f"Connection failed: {e}")
         return pd.DataFrame()
 
-# Once connected, fetch and process
+# Main logic
 if connect_button:
     df = fetch_data()
-    
-    if not df.empty:
-        df['device_time'] = pd.to_datetime(df['device_time'])
-        current_time = datetime.utcnow()
 
-        # Movement status classification
+    if not df.empty:
+        df['device_time'] = pd.to_datetime(df['device_time'], utc=True)  # Ensure tz-aware
+        current_time = datetime.now(timezone.utc)  # Also tz-aware
+
+        # Movement classification
         def classify_movement(row):
             speed = row['speed']
             time_diff = (current_time - row['device_time']).total_seconds() / 60
@@ -89,7 +89,7 @@ if connect_button:
             else:
                 return 'Parked'
 
-        # Connection status classification
+        # Connection classification
         def classify_connection(row):
             diff = (current_time - row['device_time']).total_seconds() / 60
             if diff <= gps_not_updated_min:
@@ -102,7 +102,7 @@ if connect_button:
         df['moving_status'] = df.apply(classify_movement, axis=1)
         df['connection_status'] = df.apply(classify_connection, axis=1)
 
-        # Indicators
+        # Metrics
         total_objects = df['object_label'].nunique()
         moving_count = df[df['moving_status'] == 'Moving'].shape[0]
         stopped_count = df[df['moving_status'] == 'Stopped'].shape[0]
@@ -112,13 +112,14 @@ if connect_button:
         standby_count = df[df['connection_status'] == 'Standby'].shape[0]
         offline_count = df[df['connection_status'] == 'Offline'].shape[0]
 
+        # Main metrics
         ind1, ind2, ind3, ind4 = st.columns(4)
         ind1.metric("Total Objects", total_objects)
         ind2.metric("Moving", moving_count)
         ind3.metric("Stopped", stopped_count)
         ind4.metric("Parked", parked_count)
 
-        # Connection status below indicators
+        # Connection statuses
         cs1, cs2, cs3 = st.columns(3)
         cs1.metric("Online", online_count)
         cs2.metric("Standby", standby_count)
