@@ -45,7 +45,7 @@ def fetch_data():
                 tdc.device_time,
                 tdc.latitude / 1e7::decimal AS latitude,
                 tdc.longitude / 1e7::decimal AS longitude,
-                tdc.speed,
+                tdc.speed / 100,
                 tdc.altitude,
                 ROW_NUMBER() OVER (PARTITION BY tdc.device_id ORDER BY tdc.device_time DESC) AS rn
             FROM 
@@ -66,8 +66,7 @@ def fetch_data():
             raw_business_data.devices AS d ON d.device_id = ld.device_id
         JOIN 
             raw_business_data.objects AS o ON o.device_id = d.device_id 
-        WHERE 
-            ld.rn = 1;
+       
         """
         df = pd.read_sql(query, engine)
         df['device_time'] = pd.to_datetime(df['device_time'], utc=True)
