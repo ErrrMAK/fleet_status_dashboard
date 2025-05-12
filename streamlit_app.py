@@ -32,30 +32,29 @@ with st.form(key="params_form"):
 
     update_button = st.form_submit_button("Update")
 
-
 # Data fetching function
 @st.cache_data(ttl=300)
 def fetch_data():
     try:
         engine = create_engine(f'postgresql://{user}:{password}@{hostname}:{port}/{database}')
         query = """
-    SELECT 
-    o.object_label,
-    tdc.device_time,
-    tdc.latitude / 1e7::decimal AS latitude,
-    tdc.longitude / 1e7::decimal AS longitude,
-    tdc.speed / 100 AS speed_n,
-    tdc.altitude
-FROM 
-    raw_telematics_data.tracking_data_core AS tdc
-JOIN 
-    raw_business_data.devices AS d ON d.device_id = tdc.device_id
-JOIN 
-    raw_business_data.objects AS o ON o.device_id = d.device_id
-WHERE 
-    tdc.device_time >= NOW() - INTERVAL '11 minutes'
-ORDER BY 
-    tdc.device_time DESC;
+            SELECT 
+                o.object_label,
+                tdc.device_time,
+                tdc.latitude / 1e7::decimal AS latitude,
+                tdc.longitude / 1e7::decimal AS longitude,
+                tdc.speed / 100 AS speed_n,
+                tdc.altitude
+            FROM 
+                raw_telematics_data.tracking_data_core AS tdc
+            JOIN 
+                raw_business_data.devices AS d ON d.device_id = tdc.device_id
+            JOIN 
+                raw_business_data.objects AS o ON o.device_id = d.device_id
+            WHERE 
+                tdc.device_time >= NOW() - INTERVAL '11 minutes'
+            ORDER BY 
+                tdc.device_time DESC;
         """
         df = pd.read_sql(query, engine)
         df['device_time'] = pd.to_datetime(df['device_time'], utc=True)
@@ -64,7 +63,7 @@ ORDER BY
         st.error(f"Connection failed: {e}")
         return pd.DataFrame()
 
-# When Connect is clicked, store data in session state
+# Fetch and store data when Connect is clicked
 if connect_button:
     df = fetch_data()
     if not df.empty:
@@ -73,13 +72,16 @@ if connect_button:
     else:
         st.warning("No data retrieved.")
 
-# When Update is clicked, use stored data to recompute
+# Update aggregations and display when Update is clicked
 if update_button:
     if "df" not in st.session_state or st.session_state.df.empty:
         st.warning("No data available. Please connect first.")
     else:
         df = st.session_state.df.copy()
         current_time = datetime.now(timezone.utc)
+
+        # Get the latest record for each object_label
+        latest_df = df.sort_values("device_time", ascending=False).groupby("object_label", as_index=False).first()
 
         # Movement classification
         def classify_movement(row):
@@ -102,20 +104,20 @@ if update_button:
             else:
                 return 'Offline'
 
-        df['moving_status'] = df.apply(classify_movement, axis=1)
-        df['connection_status'] = df.apply(classify_connection, axis=1)
+        latest_df['moving_status'] = latest_df.apply(classify_movement, axis=1)
+        latest_df['connection_status'] = latest_df.apply(classify_connection, axis=1)
 
         # Metrics
-        total_objects = df['object_label'].nunique()
-        moving_count = df[df['moving_status'] == 'Moving'].shape[0]
-        stopped_count = df[df['moving_status'] == 'Stopped'].shape[0]
-        parked_count = df[df['moving_status'] == 'Parked'].shape[0]
+        total_objects = latest_df.shape[0]
+        moving_count = (latest_df['moving_status'] == 'Moving').sum()
+        stopped_count = (latest_df['moving_status'] == 'Stopped').sum()
+        parked_count = (latest_df['moving_status'] == 'Parked').sum()
 
-        online_count = df[df['connection_status'] == 'Online'].shape[0]
-        standby_count = df[df['connection_status'] == 'Standby'].shape[0]
-        offline_count = df[df['connection_status'] == 'Offline'].shape[0]
+        online_count = (latest_df['connection_status'] == 'Online').sum()
+        standby_count = (latest_df['connection_status'] == 'Standby').sum()
+        offline_count = (latest_df['connection_status'] == 'Offline').sum()
 
-        # Metrics display
+        # Display metrics
         ind1, ind2, ind3, ind4 = st.columns(4)
         ind1.metric("Total Objects", total_objects)
         ind2.metric("Moving", moving_count)
@@ -130,13 +132,13 @@ if update_button:
         # Pie charts
         pie1_col, pie2_col = st.columns(2)
         with pie1_col:
-            fig1 = px.pie(df, names='moving_status', title='Movement Status Distribution')
+            fig1 = px.pie(latest_df, names='moving_status', title='Movement Status Distribution')
             st.plotly_chart(fig1)
         with pie2_col:
-            fig2 = px.pie(df, names='connection_status', title='Connection Status Distribution')
+            fig2 = px.pie(latest_df, names='connection_status', title='Connection Status Distribution')
             st.plotly_chart(fig2)
 
-        # Final table
-        display_df = df[['object_label', 'latitude', 'longitude', 'speed_n', 'connection_status', 'moving_status']]
+        # Display table
+        display_df = latest_df[['object_label', 'latitude', 'longitude', 'speed_n', 'connection_status', 'moving_status']]
         display_df.columns = ['Object Label', 'Last Latitude', 'Last Longitude', 'Last Speed', 'Connection Status', 'Moving Status']
         st.dataframe(display_df, use_container_width=True)
