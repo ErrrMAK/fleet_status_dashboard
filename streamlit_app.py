@@ -18,15 +18,20 @@ connect_button = st.sidebar.button("Connect")
 
 # Top control parameters
 st.title("Live Object Monitoring Dashboard")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    max_idle_speed = st.slider("Max Idle Speed", 0, 10, 2)
-with col2:
-    min_idle_detection = st.slider("Min Idle Detection (minutes)", 0, 10, 3)
-with col3:
-    gps_not_updated_min = st.slider("GPS Not Updated Min (minutes)", 0, 10, 2)
-with col4:
-    gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 10, 5)
+
+with st.form(key="params_form"):
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        max_idle_speed = st.slider("Max Idle Speed", 0, 10, 2)
+    with col2:
+        min_idle_detection = st.slider("Min Idle Detection (minutes)", 0, 10, 3)
+    with col3:
+        gps_not_updated_min = st.slider("GPS Not Updated Min (minutes)", 0, 10, 2)
+    with col4:
+        gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 10, 5)
+
+    update_button = st.form_submit_button("Update")
+
 
 # Data fetching function
 @st.cache_data(ttl=300)
@@ -65,18 +70,28 @@ def fetch_data():
             ld.rn = 1;
         """
         df = pd.read_sql(query, engine)
+        df['device_time'] = pd.to_datetime(df['device_time'], utc=True)
         return df
     except Exception as e:
         st.error(f"Connection failed: {e}")
         return pd.DataFrame()
 
-# Main logic
+# When Connect is clicked, store data in session state
 if connect_button:
     df = fetch_data()
-
     if not df.empty:
-        df['device_time'] = pd.to_datetime(df['device_time'], utc=True)  # Ensure tz-aware
-        current_time = datetime.now(timezone.utc)  # Also tz-aware
+        st.session_state.df = df
+        st.success("Data fetched and ready for processing.")
+    else:
+        st.warning("No data retrieved.")
+
+# When Update is clicked, use stored data to recompute
+if update_button:
+    if "df" not in st.session_state or st.session_state.df.empty:
+        st.warning("No data available. Please connect first.")
+    else:
+        df = st.session_state.df.copy()
+        current_time = datetime.now(timezone.utc)
 
         # Movement classification
         def classify_movement(row):
@@ -112,18 +127,17 @@ if connect_button:
         standby_count = df[df['connection_status'] == 'Standby'].shape[0]
         offline_count = df[df['connection_status'] == 'Offline'].shape[0]
 
-        # Main metrics
+        # Metrics display
         ind1, ind2, ind3, ind4 = st.columns(4)
         ind1.metric("Total Objects", total_objects)
         ind2.metric("Moving", moving_count)
         ind3.metric("Stopped", stopped_count)
         ind4.metric("Parked", parked_count)
 
-        # Connection statuses
-        cs1, cs2, cs3 = st.columns(3)
-        cs1.metric("Online", online_count)
-        cs2.metric("Standby", standby_count)
-        cs3.metric("Offline", offline_count)
+        cs1, cs2, cs3, cs4 = st.columns(4)
+        cs2.metric("Online", online_count)
+        cs3.metric("Standby", standby_count)
+        cs4.metric("Offline", offline_count)
 
         # Pie charts
         pie1_col, pie2_col = st.columns(2)
@@ -138,5 +152,3 @@ if connect_button:
         display_df = df[['object_label', 'latitude', 'longitude', 'speed', 'connection_status', 'moving_status']]
         display_df.columns = ['Object Label', 'Last Latitude', 'Last Longitude', 'Last Speed', 'Connection Status', 'Moving Status']
         st.dataframe(display_df, use_container_width=True)
-    else:
-        st.warning("No data retrieved. Check the connection or data availability.")
