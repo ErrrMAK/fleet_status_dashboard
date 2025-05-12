@@ -138,7 +138,12 @@ if update_button:
             fig2 = px.pie(latest_df, names='connection_status', title='Connection Status Distribution')
             st.plotly_chart(fig2)
 
-        # Display table
-        display_df = latest_df[['object_label', 'latitude', 'longitude', 'speed_n', 'connection_status', 'moving_status']]
-        display_df.columns = ['Object Label', 'Last Latitude', 'Last Longitude', 'Last Speed', 'Connection Status', 'Moving Status']
+        # Final table with Last Device Time column
+        display_df = latest_df[[
+            'object_label', 'latitude', 'longitude', 'speed_n', 'device_time', 'connection_status', 'moving_status'
+        ]]
+        display_df.columns = [
+            'Object Label', 'Last Latitude', 'Last Longitude', 'Last Speed',
+            'Last Device Time', 'Connection Status', 'Moving Status'
+        ]
         st.dataframe(display_df, use_container_width=True)
