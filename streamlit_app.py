@@ -65,8 +65,7 @@ def fetch_data():
         JOIN 
             raw_business_data.devices AS d ON d.device_id = ld.device_id
         JOIN 
-            raw_business_data.objects AS o ON o.device_id = d.device_id 
-       
+            raw_business_data.objects AS o ON o.device_id = d.device_id
         """
         df = pd.read_sql(query, engine)
         df['device_time'] = pd.to_datetime(df['device_time'], utc=True)
