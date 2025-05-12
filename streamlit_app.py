@@ -39,23 +39,35 @@ def fetch_data():
     try:
         engine = create_engine(f'postgresql://{user}:{password}@{hostname}:{port}/{database}')
         query = """
-       SELECT 
-    o.object_label,
-    tdc.device_time,
-    tdc.latitude / 1e7::decimal AS latitude,
-    tdc.longitude / 1e7::decimal AS longitude,
-    tdc.speed / 100 AS speed_n,
-    tdc.altitude
-FROM 
-    raw_telematics_data.tracking_data_core AS tdc
-JOIN 
-    raw_business_data.devices AS d ON d.device_id = tdc.device_id
-JOIN 
-    raw_business_data.objects AS o ON o.device_id = d.device_id
-WHERE 
-    tdc.device_time >= NOW() - INTERVAL '11 minutes'
-ORDER BY 
-    tdc.device_time DESC;
+     WITH latest_data AS (
+            SELECT 
+                tdc.device_id,
+                tdc.device_time,
+                tdc.latitude / 1e7::decimal AS latitude,
+                tdc.longitude / 1e7::decimal AS longitude,
+                tdc.speed,
+                tdc.altitude,
+                ROW_NUMBER() OVER (PARTITION BY tdc.device_id ORDER BY tdc.device_time DESC) AS rn
+            FROM 
+                raw_telematics_data.tracking_data_core AS tdc
+            WHERE 
+                tdc.device_time >= NOW() - INTERVAL '11 minutes'
+        )
+        SELECT 
+            o.object_label,
+            ld.device_time,
+            ld.latitude,
+            ld.longitude,
+            ld.speed,
+            ld.altitude
+        FROM 
+            latest_data AS ld
+        JOIN 
+            raw_business_data.devices AS d ON d.device_id = ld.device_id
+        JOIN 
+            raw_business_data.objects AS o ON o.device_id = d.device_id 
+        WHERE 
+            ld.rn = 1;
         """
         df = pd.read_sql(query, engine)
         df['device_time'] = pd.to_datetime(df['device_time'], utc=True)
