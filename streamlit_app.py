@@ -17,18 +17,18 @@ port = st.sidebar.text_input("Port", value="5432")
 connect_button = st.sidebar.button("Connect")
 
 # Top control parameters
-st.title("Live Object Monitoring Dashboard")
+st.title("Fleet Status Dashboard")
 
 with st.form(key="params_form"):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        max_idle_speed = st.slider("Max Idle Speed", 0, 10, 2)
+        max_idle_speed = st.slider("Max Idle Speed (km/h)", 0, 10, 2)
     with col2:
         min_idle_detection = st.slider("Min Idle Detection (minutes)", 0, 10, 3)
     with col3:
         gps_not_updated_min = st.slider("GPS Not Updated Min (minutes)", 0, 10, 2)
     with col4:
-        gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 10, 5)
+        gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 15, 5)
 
     update_button = st.form_submit_button("Update")
 
@@ -52,7 +52,7 @@ def fetch_data():
             JOIN 
                 raw_business_data.objects AS o ON o.device_id = d.device_id
             WHERE 
-                tdc.device_time >= NOW() - INTERVAL '11 minutes'
+                tdc.device_time >= NOW() - INTERVAL '15 minutes'
             ORDER BY 
                 tdc.device_time DESC;
         """
@@ -68,7 +68,7 @@ if connect_button:
     df = fetch_data()
     if not df.empty:
         st.session_state.df = df
-        st.success("Data fetched and ready for processing.")
+        st.success("Data fetched and ready for processing. Set parameters and click Update")
     else:
         st.warning("No data retrieved.")
 
@@ -87,9 +87,9 @@ if update_button:
         def classify_movement(row):
             speed = row['speed_n']
             time_diff = (current_time - row['device_time']).total_seconds() / 60
-            if speed > max_idle_speed:
+            if speed => max_idle_speed:
                 return 'Moving'
-            elif time_diff < min_idle_detection:
+            elif time_diff <= min_idle_detection:
                 return 'Stopped'
             else:
                 return 'Parked'
