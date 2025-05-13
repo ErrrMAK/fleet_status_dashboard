@@ -36,7 +36,7 @@ with st.form(key="params_form"):
 @st.cache_data(ttl=300)
 def fetch_data():
     try:
-        engine = create_engine(f'postgresql://{user}:{password}@{hostname}:{port}/{database}?sslmode=require')
+        engine = create_engine(f'postgresql://{user}:{password}@{hostname}/{database}?sslmode=require')
         query = """
             SELECT 
                 o.object_label,
