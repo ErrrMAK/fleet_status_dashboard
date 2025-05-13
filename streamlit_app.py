@@ -87,7 +87,7 @@ if update_button:
         def classify_movement(row):
             speed = row['speed_n']
             time_diff = (current_time - row['device_time']).total_seconds() / 60
-            if speed => max_idle_speed:
+            if speed > max_idle_speed:
                 return 'Moving'
             elif time_diff <= min_idle_detection:
                 return 'Stopped'
