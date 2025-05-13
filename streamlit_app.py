@@ -1,24 +1,31 @@
 import streamlit as st
 import pandas as pd
-import psycopg2
 from sqlalchemy import create_engine
 from datetime import datetime, timezone
 import plotly.express as px
 
-st.set_page_config(layout="wide")
+# Auto-refresh every 60 seconds
+st.experimental_set_query_params()  # Clears any prior query state
+st_autorefresh = st.experimental_rerun if st.experimental_get_query_params().get("refresh") else None
+st.experimental_set_query_params(refresh="true")
 
-# Sidebar: Connection details
+# Run refresh every 60 seconds
+st_autorefresh = st.experimental_rerun
+st_autorefresh_interval = 60000  # milliseconds
+st.experimental_set_query_params(refresh="true")
+
+st.set_page_config(layout="wide")
+st.title("Live Object Monitoring Dashboard")
+
+# Sidebar connection parameters
 st.sidebar.title("Database Connection")
 hostname = st.sidebar.text_input("Hostname", value="localhost")
 database = st.sidebar.text_input("Database Name")
 user = st.sidebar.text_input("Username")
 password = st.sidebar.text_input("Password", type="password")
 port = st.sidebar.text_input("Port", value="5432")
-connect_button = st.sidebar.button("Connect")
 
-# Top control parameters
-st.title("Fleet Status Dashboard")
-
+# Control parameters
 with st.form(key="params_form"):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -26,18 +33,25 @@ with st.form(key="params_form"):
     with col2:
         min_idle_detection = st.slider("Min Idle Detection (minutes)", 0, 10, 3)
     with col3:
-        gps_not_updated_min = st.slider("GPS Not Updated Min (minutes)", 0, 10, 2)
+        gps_not_updated_min = st.slider("GPS Not Updated Min (minutes)", 0, 10, 5)
     with col4:
-        gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 15, 5)
+        gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 15, 10)
 
     update_button = st.form_submit_button("Update")
 
-# Data fetching function
-@st.cache_data(ttl=300)
-def fetch_data():
+
+# Create a persistent DB connection
+@st.cache_resource
+def get_engine():
+    return create_engine(f'postgresql://{user}:{password}@{hostname}:{port}/{database}')
+
+
+# Fetch data live every minute
+def fetch_data_and_objects():
     try:
-        engine = create_engine(f'postgresql://{user}:{password}@{hostname}/{database}?sslmode=require')
-        query = """
+        engine = get_engine()
+
+        tracking_query = """
             SELECT 
                 o.object_label,
                 tdc.device_time,
@@ -56,45 +70,42 @@ def fetch_data():
             ORDER BY 
                 tdc.device_time DESC;
         """
-        df = pd.read_sql(query, engine)
-        df['device_time'] = pd.to_datetime(df['device_time'], utc=True)
-        return df
+        object_query = """
+            SELECT DISTINCT object_label
+            FROM raw_business_data.objects
+            WHERE object_label IS NOT NULL
+            ORDER BY object_label;
+        """
+        tracking_df = pd.read_sql(tracking_query, engine)
+        object_df = pd.read_sql(object_query, engine)
+
+        tracking_df['device_time'] = pd.to_datetime(tracking_df['device_time'], utc=True)
+        return tracking_df, object_df
+
     except Exception as e:
-        st.error(f"Connection failed: {e}")
-        return pd.DataFrame()
+        st.error(f"Database error: {e}")
+        return pd.DataFrame(), pd.DataFrame()
 
-# Fetch and store data when Connect is clicked
-if connect_button:
-    df = fetch_data()
-    if not df.empty:
-        st.session_state.df = df
-        st.success("Data fetched and ready for processing. Set parameters and click Update")
-    else:
-        st.warning("No data retrieved.")
 
-# Update aggregations and display when Update is clicked
+# Proceed only if Update was clicked
 if update_button:
-    if "df" not in st.session_state or st.session_state.df.empty:
-        st.warning("No data available. Please connect first.")
+    tracking_df, object_df = fetch_data_and_objects()
+    if tracking_df.empty:
+        st.warning("No recent data found.")
     else:
-        df = st.session_state.df.copy()
         current_time = datetime.now(timezone.utc)
+        latest_df = tracking_df.sort_values("device_time", ascending=False).groupby("object_label", as_index=False).first()
 
-        # Get the latest record for each object_label
-        latest_df = df.sort_values("device_time", ascending=False).groupby("object_label", as_index=False).first()
-
-        # Movement classification
         def classify_movement(row):
             speed = row['speed_n']
             time_diff = (current_time - row['device_time']).total_seconds() / 60
             if speed > max_idle_speed:
                 return 'Moving'
-            elif time_diff <= min_idle_detection:
+            elif time_diff < min_idle_detection:
                 return 'Stopped'
             else:
                 return 'Parked'
 
-        # Connection classification
         def classify_connection(row):
             diff = (current_time - row['device_time']).total_seconds() / 60
             if diff <= gps_not_updated_min:
@@ -108,7 +119,7 @@ if update_button:
         latest_df['connection_status'] = latest_df.apply(classify_connection, axis=1)
 
         # Metrics
-        total_objects = latest_df.shape[0]
+        total_objects = object_df['object_label'].nunique()
         moving_count = (latest_df['moving_status'] == 'Moving').sum()
         stopped_count = (latest_df['moving_status'] == 'Stopped').sum()
         parked_count = (latest_df['moving_status'] == 'Parked').sum()
@@ -117,9 +128,9 @@ if update_button:
         standby_count = (latest_df['connection_status'] == 'Standby').sum()
         offline_count = (latest_df['connection_status'] == 'Offline').sum()
 
-        # Display metrics
+        # Metrics display
         ind1, ind2, ind3, ind4 = st.columns(4)
-        ind1.metric("Total Objects", total_objects)
+        ind1.metric("Total Registered Objects", total_objects)
         ind2.metric("Moving", moving_count)
         ind3.metric("Stopped", stopped_count)
         ind4.metric("Parked", parked_count)
@@ -129,16 +140,14 @@ if update_button:
         cs3.metric("Standby", standby_count)
         cs4.metric("Offline", offline_count)
 
-        # Pie charts
+        # Charts
         pie1_col, pie2_col = st.columns(2)
         with pie1_col:
-            fig1 = px.pie(latest_df, names='moving_status', title='Movement Status Distribution')
-            st.plotly_chart(fig1)
+            st.plotly_chart(px.pie(latest_df, names='moving_status', title='Movement Status Distribution'))
         with pie2_col:
-            fig2 = px.pie(latest_df, names='connection_status', title='Connection Status Distribution')
-            st.plotly_chart(fig2)
+            st.plotly_chart(px.pie(latest_df, names='connection_status', title='Connection Status Distribution'))
 
-        # Final table with Last Device Time column
+        # Table
         display_df = latest_df[[
             'object_label', 'latitude', 'longitude', 'speed_n', 'device_time', 'connection_status', 'moving_status'
         ]]
