@@ -6,7 +6,6 @@ from datasets.shifts import get_shifts_summary
 from datetime import datetime, timedelta
 
 def run_shifts_dashboard():
-    st.header("Shifts Summary Dashboard")
     # Фильтры по дате и параметрам
     col1, col2 = st.columns(2)
     with col1:
@@ -19,7 +18,7 @@ def run_shifts_dashboard():
     with col4:
         max_time_diff = st.slider("Максимальный разрыв между точками (сек)", 60, 600, 300, step=10)
     # TODO: фильтр по объекту (device_id/object_label) при необходимости
-    if st.button("Обновить сводную таблицу"):
+    if st.button("refresh", key="shifts_refresh"):
         df = get_shifts_summary(st.session_state["conn"], start_date, end_date, min_speed=min_speed, max_time_diff=max_time_diff)
         st.dataframe(df, use_container_width=True)
         # Можно добавить plotly/bar chart по активности

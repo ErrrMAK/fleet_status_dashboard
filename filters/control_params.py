@@ -19,7 +19,7 @@ def display_control_params():
     with col4:
         gps_not_updated_max = st.slider("GPS Not Updated Max (minutes)", gps_not_updated_min, 15, 10)
 
-    update_button = st.button("Обновить данные")
+    update_button = st.button("refresh")
     
     return {
         'max_idle_speed': max_idle_speed,

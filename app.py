@@ -146,7 +146,7 @@ def main():
     display_header()
     
     if check_auth():
-        tabs = st.tabs(["Moving Status", "Shifts"])
+        tabs = st.tabs(["Moving Status", "Shifts", "Measurment"])
         with tabs[0]:
             try:
                 if "conn" in st.session_state and st.session_state["conn"]:
@@ -165,6 +165,15 @@ def main():
                     st.warning("Нет подключения к базе данных")
             except Exception as e:
                 st.error(f"Ошибка в Shifts: {e}")
+        with tabs[2]:
+            try:
+                if "conn" in st.session_state and st.session_state["conn"]:
+                    from dashboards.measurment import run_measurment_dashboard
+                    run_measurment_dashboard()
+                else:
+                    st.warning("Нет подключения к базе данных")
+            except Exception as e:
+                st.error(f"Ошибка в Measurment: {e}")
     else:
         st.info("Пожалуйста, подключитесь к базе данных для продолжения")
 
