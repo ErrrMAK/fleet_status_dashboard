@@ -4,8 +4,7 @@
 import streamlit as st
 import pandas as pd
 from charts import display_movement_status_chart
-from db_connection import get_sqlalchemy_engine
-from SQL.queries import get_current_status_query
+from datasets.queries import get_current_status_query
 from filters import display_control_params
 
 @st.cache_data(ttl=300)  # Кэширование на 5 минут
@@ -14,7 +13,7 @@ def load_current_status(params):
     Загружает данные с учетом параметров фильтрации
     """
     query = get_current_status_query(params)
-    return pd.read_sql(query, get_sqlalchemy_engine())
+    return pd.read_sql(query, st.session_state["conn"])
 
 def display_metrics(df):
     """

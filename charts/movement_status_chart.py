@@ -4,7 +4,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from SQL.queries import get_current_status_query
+from datasets.queries import get_current_status_query
 from db_connection import get_sqlalchemy_engine
 
 def display_movement_status_chart(params=None):
