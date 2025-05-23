@@ -146,7 +146,11 @@ def main():
     display_header()
     
     if check_auth():
+<<<<<<< HEAD
         tabs = st.tabs(["Moving Status", "Shifts", "Measurment"])
+=======
+        tabs = st.tabs(["Moving Status", "Shifts"])
+>>>>>>> 59fb1d1 (разделен дашборд и апп)
         with tabs[0]:
             try:
                 if "conn" in st.session_state and st.session_state["conn"]:
@@ -165,6 +169,7 @@ def main():
                     st.warning("Нет подключения к базе данных")
             except Exception as e:
                 st.error(f"Ошибка в Shifts: {e}")
+<<<<<<< HEAD
         with tabs[2]:
             try:
                 if "conn" in st.session_state and st.session_state["conn"]:
@@ -174,6 +179,8 @@ def main():
                     st.warning("Нет подключения к базе данных")
             except Exception as e:
                 st.error(f"Ошибка в Measurment: {e}")
+=======
+>>>>>>> 59fb1d1 (разделен дашборд и апп)
     else:
         st.info("Пожалуйста, подключитесь к базе данных для продолжения")
 
